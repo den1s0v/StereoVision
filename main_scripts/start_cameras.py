@@ -21,7 +21,7 @@ class Start_Cameras:
         gstreamer_pipeline_string = self.gstreamer_pipeline()
         self.open(gstreamer_pipeline_string)
 
-#Working. Can open cameras
+    #Opening the cameras
     def open(self, gstreamer_pipeline_string):
         gstreamer_pipeline_string = self.gstreamer_pipeline()
         try:
@@ -39,7 +39,7 @@ class Start_Cameras:
         # Grab the first frame to start the video capturing
         self.grabbed, self.frame = self.video_capture.read()
 
-#Working
+    #Starting the cameras
     def start(self):
         if self.running:
             print('Video capturing is already running')
@@ -65,8 +65,6 @@ class Start_Cameras:
                     self.frame = frame
             except RuntimeError:
                 print("Could not read image from camera")
-        # FIX ME - stop and cleanup thread
-        # Something bad happened
 
     def read(self):
         with self.read_lock:
@@ -86,10 +84,10 @@ class Start_Cameras:
     # Here we directly select sensor_mode 3 (1280x720, 59.9999 fps)
     def gstreamer_pipeline(self,
             sensor_mode=3,
-            capture_width=640,
-            capture_height=480,
-            display_width=320,
-            display_height=240,
+            capture_width=1280,
+            capture_height=720,
+            display_width=640,
+            display_height=360,
             framerate=30,
             flip_method=0,
     ):
@@ -115,7 +113,7 @@ class Start_Cameras:
         )
 
 
-#this part only runs if we run the start_cameras script. If the file is being imported then this portion will not run
+#This is the main. Read this first. 
 if __name__ == "__main__":
     left_camera = Start_Cameras(0).start()
     right_camera = Start_Cameras(1).start()
@@ -126,7 +124,7 @@ if __name__ == "__main__":
 
         if left_grabbed and right_grabbed:
             images = np.hstack((left_frame, right_frame))
-            cv2.imshow("images", images)
+            cv2.imshow("Camera Images", images)
             k = cv2.waitKey(1) & 0xFF
 
             if k == ord('q'):

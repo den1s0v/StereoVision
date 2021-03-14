@@ -1,15 +1,11 @@
-#Used to tune the depth map. Takes real time video from the cameras and let's you tune
-
+#Tune your depth map with real-time video from the cameras.
 import cv2
 import os
 import threading
 import numpy as np
 import time
 from datetime import datetime
-from matplotlib import pyplot as plt
-from matplotlib.widgets import Slider, Button
 import json
-from stereovision.calibration import StereoCalibrator
 from stereovision.calibration import StereoCalibration
 from start_cameras import Start_Cameras
 
@@ -28,11 +24,13 @@ loading = False
 
 
 def stereo_depth_map(rectified_pair, variable_mapping):
+
     '''print ('SWS='+str(SWS)+' PFS='+str(PFS)+' PFC='+str(PFC)+' MDS='+\
            str(MDS)+' NOD='+str(NOD)+' TTH='+str(TTH))
     print (' UR='+str(UR)+' SR='+str(SR)+' SPWS='+str(SPWS))'''
 
     #blockSize is the SAD Window Size
+    #Filter settings
     sbm = cv2.StereoBM_create(numDisparities=16, blockSize=variable_mapping["SWS"]) 
     sbm.setPreFilterType(1)    
     sbm.setPreFilterSize(variable_mapping['PreFiltSize'])
@@ -49,19 +47,11 @@ def stereo_depth_map(rectified_pair, variable_mapping):
     dmLeft = rectified_pair[0]
     dmRight = rectified_pair[1]
     disparity = sbm.compute(dmLeft, dmRight)
-
-    local_max = disparity.max()
-    local_min = disparity.min()
-    '''print ("MAX " + str(local_max))
-    print ("MIN " + str(local_min))'''
-    disparity_visual = (disparity-local_min)*(1.0/(local_max-local_min))
-    
-    local_max = disparity_visual.max()
-    local_min = disparity_visual.min()
-    '''print ("MAX " + str(local_max))
-    print ("MIN " + str(local_min))'''
-    cv2.normalize(disparity, disparity_visual, 0, 255, cv2.NORM_MINMAX)
-    return disparity_visual
+    disparity_normalized = cv2.normalize(disparity, None, 0, 255, cv2.NORM_MINMAX)
+    #Convering Numpy Array to CV_8UC1
+    image = np.array(disparity_normalized, dtype = np.uint8)
+    disparity_color = cv2.applyColorMap(image, cv2.COLORMAP_JET)
+    return disparity_color, disparity_normalized
 
 def save_load_map_settings(current_save, current_load, variable_mapping):
     global loading
@@ -80,26 +70,30 @@ def save_load_map_settings(current_save, current_load, variable_mapping):
 
 
     if current_load != 0:
-        loading = True
-        fName = '../3dmap_set.txt'
-        print('Loading parameters from file...')
-        f=open(fName, 'r')
-        data = json.load(f)
+        if os.path.isfile('../3dmap_set.txt') == True:
+            loading = True
+            fName = '../3dmap_set.txt'
+            print('Loading parameters from file...')
+            f=open(fName, 'r')
+            data = json.load(f)
 
-        cv2.setTrackbarPos("SWS", "Stereo", data['SADWindowSize'])
-        cv2.setTrackbarPos("PreFiltSize", "Stereo", data['preFilterSize'])
-        cv2.setTrackbarPos("PreFiltCap", "Stereo", data['preFilterCap'])
-        cv2.setTrackbarPos("MinDisp", "Stereo", data['minDisparity']+100)
-        cv2.setTrackbarPos("NumofDisp", "Stereo", int(data['numberOfDisparities']/16))
-        cv2.setTrackbarPos("TxtrThrshld", "Stereo", data['textureThreshold'])
-        cv2.setTrackbarPos("UniqRatio", "Stereo", data['uniquenessRatio'])
-        cv2.setTrackbarPos("SpeckleRange", "Stereo", data['speckleRange'])
-        cv2.setTrackbarPos("SpeckleSize", "Stereo", data['speckleWindowSize'])
+            cv2.setTrackbarPos("SWS", "Stereo", data['SADWindowSize'])
+            cv2.setTrackbarPos("PreFiltSize", "Stereo", data['preFilterSize'])
+            cv2.setTrackbarPos("PreFiltCap", "Stereo", data['preFilterCap'])
+            cv2.setTrackbarPos("MinDisp", "Stereo", data['minDisparity']+100)
+            cv2.setTrackbarPos("NumofDisp", "Stereo", int(data['numberOfDisparities']/16))
+            cv2.setTrackbarPos("TxtrThrshld", "Stereo", data['textureThreshold'])
+            cv2.setTrackbarPos("UniqRatio", "Stereo", data['uniquenessRatio'])
+            cv2.setTrackbarPos("SpeckleRange", "Stereo", data['speckleRange'])
+            cv2.setTrackbarPos("SpeckleSize", "Stereo", data['speckleWindowSize'])
 
-        f.close()
-        print ('Parameters loaded from file '+fName)
-        print ('Redrawing depth map with loaded parameters...')
-        print ('Done!') 
+            f.close()
+            print ('Parameters loaded from file '+fName)
+            print ('Redrawing depth map with loaded parameters...')
+            print ('Done!') 
+
+        else: 
+            print ("File to load from doesn't exist.")
 
 def activateTrackbars(x):
     global loading
@@ -111,8 +105,6 @@ def create_trackbars() :
 
     #SWS cannot be larger than the image width and image heights.
     #In this case, width = 320 and height = 240
-
-    #https://stackoverflow.com/questions/46951610/opencv-python-trackbar-callback
     cv2.createTrackbar("SWS", "Stereo", 115, 230, activateTrackbars)
     cv2.createTrackbar("SpeckleSize", "Stereo", 0, 300, activateTrackbars)
     cv2.createTrackbar("SpeckleRange", "Stereo", 0, 40, activateTrackbars)
@@ -125,10 +117,13 @@ def create_trackbars() :
     cv2.createTrackbar("Save Settings", "Stereo", 0, 1, activateTrackbars)
     cv2.createTrackbar("Load Settings","Stereo", 0, 1, activateTrackbars)
 
+def onMouse(event, x, y, flag, disparity_normalized):
+    if event == cv2.EVENT_LBUTTONDOWN:
+        distance = disparity_normalized[y][x]
+        print("Distance in centimeters {}".format(distance))
 
 
 
-#################################################################################################
 if __name__ == '__main__':
     left_camera = Start_Cameras(0).start()
     right_camera = Start_Cameras(1).start()
@@ -144,7 +139,6 @@ if __name__ == '__main__':
 
     variable_mapping = {"SWS" : 15, "SpeckleSize" : 100, "SpeckleRange" : 15, "UniqRatio" : 10, "TxtrThrshld" : 100, "NumofDisp" : 1,
     "MinDisp": -25, "PreFiltCap" : 30, "PreFiltSize" : 105}
-    # dict.fromkeys(variables)
 
     while True:
         left_grabbed, left_frame = left_camera.read()
@@ -189,13 +183,14 @@ if __name__ == '__main__':
             save_load_map_settings(current_save, current_load, variable_mapping)
             cv2.setTrackbarPos("Save Settings", "Stereo", 0)
             cv2.setTrackbarPos("Load Settings", "Stereo", 0)
-            disparity = stereo_depth_map(rectified_pair, variable_mapping)
-            #Convering Numpy Array to CV_8UC1
-            image = np.array(disparity * 255, dtype = np.uint8)
-            disparity_color = cv2.applyColorMap(image, cv2.COLORMAP_JET)
-          
+            disparity_color, disparity_normalized = stereo_depth_map(rectified_pair, variable_mapping)
+
+            #What happens when the mouse is clicked
+            cv2.setMouseCallback("Stereo", onMouse, disparity_normalized)
+                      
             cv2.imshow("Stereo", disparity_color)
-            cv2.imshow("Left", rectified_pair[0])qqqq
+            cv2.imshow("Frame", np.hstack((rectified_pair[0], rectified_pair[1])))
+            
             k = cv2.waitKey(1) & 0xFF
             if k == ord('q'):
                 break
