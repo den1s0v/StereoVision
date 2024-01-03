@@ -1,8 +1,11 @@
+import collections
+import json
+
 import cv2
 import numpy as np
-import json
 from stereovision.calibration import StereoCalibration
-from start_cameras import Start_Cameras
+
+from start_cameras import get_cameras
 
 
 # Depth map default preset
@@ -66,33 +69,34 @@ def onMouse(event, x, y, flag, disparity_normalized):
 
 
 if __name__ == "__main__":
-    left_camera = Start_Cameras(0).start()
-    right_camera = Start_Cameras(1).start()
+    # left_camera = Start_Cameras(0).start()
+    # right_camera = Start_Cameras(1).start()
+    left_camera, right_camera = get_cameras()
     load_map_settings("../3dmap_set.txt")
 
     cv2.namedWindow("DepthMap")
+    calibration = StereoCalibration(input_folder='../calib_result')
 
     while True:
         left_grabbed, left_frame = left_camera.read()
         right_grabbed, right_frame = right_camera.read()
 
-        if left_grabbed and right_grabbed:  
-            #Convert BGR to Grayscale     
+        if left_grabbed and right_grabbed:
+            # Convert BGR to Grayscale
             left_gray_frame = cv2.cvtColor(left_frame, cv2.COLOR_BGR2GRAY)
             right_gray_frame = cv2.cvtColor(right_frame, cv2.COLOR_BGR2GRAY)
 
-            #calling all calibration results
-            calibration = StereoCalibration(input_folder='../calib_result')
+            # calling all calibration results
             rectified_pair = calibration.rectify((left_gray_frame, right_gray_frame))
             disparity_color, disparity_normalized = stereo_depth_map(rectified_pair)
 
-            #Mouse clicked function
+            # Mouse clicked function
             cv2.setMouseCallback("DepthMap", onMouse, disparity_normalized)
 
-            #Show depth map and image frames
+            # Show depth map and image frames
             output = cv2.addWeighted(left_frame, 0.5, disparity_color, 0.5, 0.0)
             cv2.imshow("DepthMap", np.hstack((disparity_color, output)))
-            
+
             cv2.imshow("Frames", np.hstack((left_frame, right_frame)))
 
             k = cv2.waitKey(1) & 0xFF
@@ -107,9 +111,3 @@ if __name__ == "__main__":
     right_camera.stop()
     right_camera.release()
     cv2.destroyAllWindows()
-                
-
-
-    
-
-

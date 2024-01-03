@@ -1,4 +1,4 @@
-#Tune your depth map with real-time video from the cameras.
+# Tune your depth map with real-time video from the cameras.
 import cv2
 import os
 import threading
@@ -7,18 +7,18 @@ import time
 from datetime import datetime
 import json
 from stereovision.calibration import StereoCalibration
-from start_cameras import Start_Cameras
+from start_cameras import get_cameras
 
 # Depth map function
-SWS = 215
-PFS = 115
-PFC = 43
-MDS = -25
-NOD = 112
-TTH = 100
-UR = 10
-SR = 15
-SPWS = 100
+SWS = 215    # SADWindowSize
+PFS = 115    # preFilterSize
+PFC = 43     # preFilterCap
+MDS = -25    # minDisparity
+NOD = 112    # numberOfDisparities
+TTH = 100    # textureThreshold
+UR = 10      # uniquenessRatio
+SR = 15      # speckleRange
+SPWS = 100   # speckleWindowSize
 
 loading = False
 
@@ -58,53 +58,58 @@ def save_load_map_settings(current_save, current_load, variable_mapping):
     if current_save != 0:
         print('Saving to file...')
 
-        result = json.dumps({'SADWindowSize':variable_mapping["SWS"], 'preFilterSize':variable_mapping['PreFiltSize'], 'preFilterCap':variable_mapping['PreFiltCap'], 
-                'minDisparity':variable_mapping['MinDisp'], 'numberOfDisparities': variable_mapping['NumofDisp'], 'textureThreshold':variable_mapping['TxtrThrshld'], 
-                'uniquenessRatio':variable_mapping['UniqRatio'], 'speckleRange':variable_mapping['SpeckleRange'], 'speckleWindowSize':variable_mapping['SpeckleSize']},
-                sort_keys=True, indent=4, separators=(',',':'))
+        result = json.dumps({'SADWindowSize': variable_mapping["SWS"], 'preFilterSize': variable_mapping['PreFiltSize'],
+                             'preFilterCap': variable_mapping['PreFiltCap'],
+                             'minDisparity': variable_mapping['MinDisp'],
+                             'numberOfDisparities': variable_mapping['NumofDisp'],
+                             'textureThreshold': variable_mapping['TxtrThrshld'],
+                             'uniquenessRatio': variable_mapping['UniqRatio'],
+                             'speckleRange': variable_mapping['SpeckleRange'],
+                             'speckleWindowSize': variable_mapping['SpeckleSize']},
+                            sort_keys=True, indent=4, separators=(',', ':'))
         fName = '../3dmap_set.txt'
-        f = open (str(fName), 'w')
+        f = open(str(fName), 'w')
         f.write(result)
         f.close()
-        print ('Settings saved to file '+fName)
-
+        print('Settings saved to file ' + fName)
 
     if current_load != 0:
         if os.path.isfile('../3dmap_set.txt') == True:
             loading = True
             fName = '../3dmap_set.txt'
             print('Loading parameters from file...')
-            f=open(fName, 'r')
+            f = open(fName, 'r')
             data = json.load(f)
 
             cv2.setTrackbarPos("SWS", "Stereo", data['SADWindowSize'])
             cv2.setTrackbarPos("PreFiltSize", "Stereo", data['preFilterSize'])
             cv2.setTrackbarPos("PreFiltCap", "Stereo", data['preFilterCap'])
-            cv2.setTrackbarPos("MinDisp", "Stereo", data['minDisparity']+100)
-            cv2.setTrackbarPos("NumofDisp", "Stereo", int(data['numberOfDisparities']/16))
+            cv2.setTrackbarPos("MinDisp", "Stereo", data['minDisparity'] + 100)
+            cv2.setTrackbarPos("NumofDisp", "Stereo", int(data['numberOfDisparities'] / 16))
             cv2.setTrackbarPos("TxtrThrshld", "Stereo", data['textureThreshold'])
             cv2.setTrackbarPos("UniqRatio", "Stereo", data['uniquenessRatio'])
             cv2.setTrackbarPos("SpeckleRange", "Stereo", data['speckleRange'])
             cv2.setTrackbarPos("SpeckleSize", "Stereo", data['speckleWindowSize'])
 
             f.close()
-            print ('Parameters loaded from file '+fName)
-            print ('Redrawing depth map with loaded parameters...')
-            print ('Done!') 
+            print('Parameters loaded from file ' + fName)
+            print('Redrawing depth map with loaded parameters...')
+            print('Done!')
 
-        else: 
-            print ("File to load from doesn't exist.")
+        else:
+            print("File to load from doesn't exist.")
+
 
 def activateTrackbars(x):
     global loading
     loading = False
-    
 
-def create_trackbars() :
+
+def create_trackbars():
     global loading
 
-    #SWS cannot be larger than the image width and image heights.
-    #In this case, width = 320 and height = 240
+    # SWS cannot be larger than the image width and image heights.
+    # In this case, width = 320 and height = 240
     cv2.createTrackbar("SWS", "Stereo", 115, 230, activateTrackbars)
     cv2.createTrackbar("SpeckleSize", "Stereo", 0, 300, activateTrackbars)
     cv2.createTrackbar("SpeckleRange", "Stereo", 0, 40, activateTrackbars)
@@ -123,22 +128,27 @@ def onMouse(event, x, y, flag, disparity_normalized):
         print("Distance in centimeters {}".format(distance))
 
 
-
 if __name__ == '__main__':
-    left_camera = Start_Cameras(0).start()
-    right_camera = Start_Cameras(1).start()
+    if not USE_STATIC_IMAGES:
+        # left_camera = Start_Cameras(0).start()
+        # right_camera = Start_Cameras(1).start()
+        left_camera, right_camera = get_cameras()
+
+        calibration = StereoCalibration(input_folder='../calib_result')
 
     # Initialise trackbars and windows
-    cv2.namedWindow("Stereo")
+    cv2.namedWindow("Stereo", cv2.WINDOW_NORMAL)
+    cv2.resizeWindow('Stereo', 900, 500)
     create_trackbars()
 
-    print ("Cameras Started")
+    print("Cameras Started")
 
     variables = ["SWS", "SpeckleSize", "SpeckleRange", "UniqRatio", "TxtrThrshld", "NumofDisp",
-    "MinDisp", "PreFiltCap", "PreFiltSize"]
+                 "MinDisp", "PreFiltCap", "PreFiltSize"]
 
-    variable_mapping = {"SWS" : 15, "SpeckleSize" : 100, "SpeckleRange" : 15, "UniqRatio" : 10, "TxtrThrshld" : 100, "NumofDisp" : 1,
-    "MinDisp": -25, "PreFiltCap" : 30, "PreFiltSize" : 105}
+    variable_mapping = {"SWS": 15, "SpeckleSize": 100, "SpeckleRange": 15, "UniqRatio": 10, "TxtrThrshld": 100,
+                        "NumofDisp": 1,
+                        "MinDisp": -25, "PreFiltCap": 30, "PreFiltSize": 105}
 
     while True:
         left_grabbed, left_frame = left_camera.read()
