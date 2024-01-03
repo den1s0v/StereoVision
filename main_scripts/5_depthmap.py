@@ -20,12 +20,38 @@ SR = 14
 SPWS = 100
 
 
+MEAN_QUEUE_MAX_SIZE = 3
+MEAN_QUEUE = collections.deque(maxlen=MEAN_QUEUE_MAX_SIZE)
+
+def filter_consequent_frames(disparity_normalized):
+    ###
+    # take mean of several latest pictures
+    if MEAN_QUEUE_MAX_SIZE:
+        # replace zeros with nan to mark unknown area
+        frame = np.where(disparity_normalized > 0, disparity_normalized, np.nan)
+        # push to queue
+        if len(MEAN_QUEUE) >= MEAN_QUEUE_MAX_SIZE:
+            MEAN_QUEUE.popleft()
+        MEAN_QUEUE.append(frame)
+
+        # calc mean over queued frames
+        mean_frame = sum(MEAN_QUEUE) / MEAN_QUEUE_MAX_SIZE
+
+        np.nan_to_num(mean_frame, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
+        return mean_frame
+    else:
+        return disparity_normalized
+
+
+
 def load_map_settings(file):
     global SWS, PFS, PFC, MDS, NOD, TTH, UR, SR, SPWS, loading_settings, sbm
     print('Loading parameters from file...')
     f = open(file, 'r')
     data = json.load(f)
-    #loading data from the json file and assigning it to the Variables
+    f.close()
+
+    # loading data from the json file and assigning it to the Variables
     SWS = data['SADWindowSize']
     PFS = data['preFilterSize']
     PFC = data['preFilterCap']
@@ -35,31 +61,52 @@ def load_map_settings(file):
     UR = data['uniquenessRatio']
     SR = data['speckleRange']
     SPWS = data['speckleWindowSize']
-    
-    #changing the actual values of the variables
-    sbm = cv2.StereoBM_create(numDisparities=16, blockSize=SWS) 
-    sbm.setPreFilterType(1)
-    sbm.setPreFilterSize(PFS)
-    sbm.setPreFilterCap(PFC)
-    sbm.setMinDisparity(MDS)
-    sbm.setNumDisparities(NOD)
-    sbm.setTextureThreshold(TTH)
-    sbm.setUniquenessRatio(UR)
-    sbm.setSpeckleRange(SR)
-    sbm.setSpeckleWindowSize(SPWS)
-    f.close()
+
+    # changing the actual values of the variables
+    if False:
+        sbm = cv2.StereoBM_create(numDisparities=16, blockSize=SWS)
+        sbm.setPreFilterType(1)
+        sbm.setPreFilterSize(PFS)
+        sbm.setPreFilterCap(PFC)
+        sbm.setMinDisparity(MDS)
+        sbm.setNumDisparities(NOD)
+        sbm.setTextureThreshold(TTH)
+        sbm.setUniquenessRatio(UR)
+        sbm.setSpeckleRange(SR)
+        sbm.setSpeckleWindowSize(SPWS)
+    else:
+        sbm = cv2.StereoSGBM_create(numDisparities=16, blockSize=SWS)
+        # sbm.setPreFilterType(1)
+        # sbm.setPreFilterSize(PFS)
+        sbm.setPreFilterCap(PFC)
+        sbm.setMinDisparity(MDS)
+        sbm.setNumDisparities(NOD)
+        # sbm.setTextureThreshold(TTH)
+        sbm.setUniquenessRatio(UR)
+        sbm.setSpeckleRange(SR)
+        sbm.setSpeckleWindowSize(SPWS)
+
     print('Parameters loaded from file ' + file)
 
+
 def stereo_depth_map(rectified_pair):
-    #blockSize is the SAD Window Size
+    # blockSize is the SAD Window Size
 
     dmLeft = rectified_pair[0]
     dmRight = rectified_pair[1]
     disparity = sbm.compute(dmLeft, dmRight)
     disparity_normalized = cv2.normalize(disparity, None, 0, 255, cv2.NORM_MINMAX)
-    image = np.array(disparity_normalized, dtype = np.uint8)
+
+    ###
+    # take mean of several latest pictures
+    # replace variable
+    disparity_normalized = filter_consequent_frames(disparity_normalized)
+    ###
+
+    image = np.array(disparity_normalized, dtype=np.uint8)
     disparity_color = cv2.applyColorMap(image, cv2.COLORMAP_JET)
     return disparity_color, disparity_normalized
+
 
 def onMouse(event, x, y, flag, disparity_normalized):
     if event == cv2.EVENT_LBUTTONDOWN:

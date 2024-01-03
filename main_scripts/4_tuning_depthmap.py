@@ -23,35 +23,63 @@ SPWS = 100   # speckleWindowSize
 loading = False
 
 
-def stereo_depth_map(rectified_pair, variable_mapping):
+# Whether to use camera or static images as image source:
 
+USE_STATIC_IMAGES = None
+
+if USE_STATIC_IMAGES:
+    img_num = '09'
+    USE_STATIC_IMAGES = tuple(
+        cv2.imread(image_path, 0)  # gray
+        for image_path in
+        (
+            r'..\rectified_pairs\left_%s.png' % img_num,
+            r'..\rectified_pairs\right_%s.png' % img_num,
+        )
+    )
+
+
+def stereo_depth_map(rectified_pair, variable_mapping):
     '''print ('SWS='+str(SWS)+' PFS='+str(PFS)+' PFC='+str(PFC)+' MDS='+\
            str(MDS)+' NOD='+str(NOD)+' TTH='+str(TTH))
     print (' UR='+str(UR)+' SR='+str(SR)+' SPWS='+str(SPWS))'''
 
-    #blockSize is the SAD Window Size
-    #Filter settings
-    sbm = cv2.StereoBM_create(numDisparities=16, blockSize=variable_mapping["SWS"]) 
-    sbm.setPreFilterType(1)    
-    sbm.setPreFilterSize(variable_mapping['PreFiltSize'])
-    sbm.setPreFilterCap(variable_mapping['PreFiltCap'])
-    sbm.setSpeckleRange(variable_mapping['SpeckleRange'])
-    sbm.setSpeckleWindowSize(variable_mapping['SpeckleSize'])
-    sbm.setMinDisparity(variable_mapping['MinDisp'])
-    sbm.setNumDisparities(variable_mapping['NumofDisp'])
-    sbm.setTextureThreshold(variable_mapping['TxtrThrshld'])
-    sbm.setUniquenessRatio(variable_mapping['UniqRatio'])
-    
+    # blockSize is the SAD Window Size
+    # Filter settings
 
-    c, r = rectified_pair[0].shape
+    if False:
+        sbm = cv2.StereoBM_create(numDisparities=16, blockSize=variable_mapping["SWS"])
+        sbm.setPreFilterType(1)
+        sbm.setPreFilterSize(variable_mapping['PreFiltSize'])
+        sbm.setPreFilterCap(variable_mapping['PreFiltCap'])
+        sbm.setSpeckleRange(variable_mapping['SpeckleRange'])
+        sbm.setSpeckleWindowSize(variable_mapping['SpeckleSize'])
+        sbm.setMinDisparity(variable_mapping['MinDisp'])
+        sbm.setNumDisparities(variable_mapping['NumofDisp'])
+        sbm.setTextureThreshold(variable_mapping['TxtrThrshld'])
+        sbm.setUniquenessRatio(variable_mapping['UniqRatio'])
+    else:
+        sbm = cv2.StereoSGBM_create(numDisparities=16, blockSize=variable_mapping["SWS"])
+        # sbm.setPreFilterType(1)
+        # sbm.setPreFilterSize(variable_mapping['PreFiltSize'])
+        sbm.setPreFilterCap(variable_mapping['PreFiltCap'])
+        sbm.setSpeckleRange(variable_mapping['SpeckleRange'])
+        sbm.setSpeckleWindowSize(variable_mapping['SpeckleSize'])
+        sbm.setMinDisparity(variable_mapping['MinDisp'])
+        sbm.setNumDisparities(variable_mapping['NumofDisp'])
+        # sbm.setTextureThreshold(variable_mapping['TxtrThrshld'])
+        sbm.setUniquenessRatio(variable_mapping['UniqRatio'])
+
+    # c, r = rectified_pair[0].shape
     dmLeft = rectified_pair[0]
     dmRight = rectified_pair[1]
     disparity = sbm.compute(dmLeft, dmRight)
     disparity_normalized = cv2.normalize(disparity, None, 0, 255, cv2.NORM_MINMAX)
-    #Convering Numpy Array to CV_8UC1
-    image = np.array(disparity_normalized, dtype = np.uint8)
+    # Converting Numpy Array to CV_8UC1
+    image = np.array(disparity_normalized, dtype=np.uint8)
     disparity_color = cv2.applyColorMap(image, cv2.COLORMAP_JET)
     return disparity_color, disparity_normalized
+
 
 def save_load_map_settings(current_save, current_load, variable_mapping):
     global loading
@@ -120,7 +148,8 @@ def create_trackbars():
     cv2.createTrackbar("PreFiltCap", "Stereo", 1, 63, activateTrackbars)
     cv2.createTrackbar("PreFiltSize", "Stereo", 5, 255, activateTrackbars)
     cv2.createTrackbar("Save Settings", "Stereo", 0, 1, activateTrackbars)
-    cv2.createTrackbar("Load Settings","Stereo", 0, 1, activateTrackbars)
+    cv2.createTrackbar("Load Settings", "Stereo", 0, 1, activateTrackbars)
+
 
 def onMouse(event, x, y, flag, disparity_normalized):
     if event == cv2.EVENT_LBUTTONDOWN:
@@ -151,18 +180,25 @@ if __name__ == '__main__':
                         "MinDisp": -25, "PreFiltCap": 30, "PreFiltSize": 105}
 
     while True:
-        left_grabbed, left_frame = left_camera.read()
-        right_grabbed, right_frame = right_camera.read()
+        ok = False
 
-        if left_grabbed and right_grabbed:
-            left_gray_frame = cv2.cvtColor(left_frame, cv2.COLOR_BGR2GRAY)
-            right_gray_frame = cv2.cvtColor(right_frame, cv2.COLOR_BGR2GRAY)
+        if not USE_STATIC_IMAGES:
+            left_grabbed, left_frame = left_camera.read()
+            right_grabbed, right_frame = right_camera.read()
 
-            calibration = StereoCalibration(input_folder='../calib_result')
-            rectified_pair = calibration.rectify((left_gray_frame, right_gray_frame))
+            if left_grabbed and right_grabbed:
+                ok = True
+                left_gray_frame = cv2.cvtColor(left_frame, cv2.COLOR_BGR2GRAY)
+                right_gray_frame = cv2.cvtColor(right_frame, cv2.COLOR_BGR2GRAY)
 
-            #getting trackbar position and assigning to the variables
-            if loading == False:
+                rectified_pair = calibration.rectify((left_gray_frame, right_gray_frame))
+        else:
+            ok = True
+            rectified_pair = USE_STATIC_IMAGES
+
+        if ok:
+            # getting trackbar position and assigning to the variables
+            if not loading:
                 for v in variables:
                     current_value = cv2.getTrackbarPos(v, "Stereo")
                     if v == "SWS" or v == "PreFiltSize":
@@ -170,7 +206,7 @@ if __name__ == '__main__':
                             current_value = 5
                         if current_value % 2 == 0:
                             current_value += 1
-                    
+
                     if v == "NumofDisp":
                         if current_value == 0:
                             current_value = 1
@@ -180,38 +216,39 @@ if __name__ == '__main__':
                     if v == "UniqRatio" or v == "PreFiltCap":
                         if current_value == 0:
                             current_value = 1
-                    
+
                     variable_mapping[v] = current_value
 
-
-            
-           #getting save and load trackbar positions
+            # getting save and load trackbar positions
 
             current_save = cv2.getTrackbarPos("Save Settings", "Stereo")
             current_load = cv2.getTrackbarPos("Load Settings", "Stereo")
- 
+
             save_load_map_settings(current_save, current_load, variable_mapping)
             cv2.setTrackbarPos("Save Settings", "Stereo", 0)
             cv2.setTrackbarPos("Load Settings", "Stereo", 0)
             disparity_color, disparity_normalized = stereo_depth_map(rectified_pair, variable_mapping)
 
-            #What happens when the mouse is clicked
-            cv2.setMouseCallback("Stereo", onMouse, disparity_normalized)
-                      
-            cv2.imshow("Stereo", disparity_color)
+            # cv2.imshow("Stereo", disparity_color)
+            cv2.imshow("Color", disparity_color)
+            cv2.imshow("Normalized", disparity_normalized)
+
+            # What happens when the mouse is clicked
+            cv2.setMouseCallback("Color", onMouse, disparity_normalized)
+
             cv2.imshow("Frame", np.hstack((rectified_pair[0], rectified_pair[1])))
-            
+
             k = cv2.waitKey(1) & 0xFF
             if k == ord('q'):
                 break
 
             else:
+                # time.sleep(0.08)
                 continue
 
-    left_camera.stop()
-    left_camera.release()
-    right_camera.stop()
-    right_camera.release()
+    if not USE_STATIC_IMAGES:
+        left_camera.stop()
+        left_camera.release()
+        right_camera.stop()
+        right_camera.release()
     cv2.destroyAllWindows()
-                
-
